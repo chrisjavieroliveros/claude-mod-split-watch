@@ -1,8 +1,9 @@
 // 1 getting long (red-orange), 2 split soon (red), 3 split now (deep red).
 export type Level = 1 | 2 | 3
 
-// A file over its kind's first threshold: its project-relative path, word count and level.
-export type Flag = { path: string; words: number; level: Level }
+// A file over its kind's first threshold: its path as shown (project-relative, or ~/... for the user's), its absolute
+// path (what "Ignore this file" records), word count and level.
+export type Flag = { path: string; abs: string; words: number; level: Level }
 
 declare module 'claude-code' {
   interface PluginState {

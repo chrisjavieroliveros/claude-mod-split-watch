@@ -19,6 +19,17 @@ SKILL.md 2.5k / 3.5k / 4.5k. Docs stop before ~25k tokens (one Read), SKILL.md b
 in the prompt box), *List all* runs `/split-check`, and *Dismiss* hides the card until a file grows another level.
 `/split-check reset` brings dismissed cards back.
 
+*Ignore this file* stops watching the file the card names, for good, on this machine only: for files that aren't
+yours to split, like a skill another tool installs and rewrites (the Unity CLI's `unity-cli`, say). It adds the file's
+absolute path to `~/.claude/split-watch.ignored.json`, which is never read from a project and isn't touched by
+`/split-check reset`:
+
+```json
+{ "files": ["/Users/me/.claude/skills/unity-cli/SKILL.md"] }
+```
+
+Remove a path from it to watch that file again. `/split-check` says how many files are ignored.
+
 ## Settings
 
 Optional `split-watch.json`, in `~/.claude/` (your defaults) and/or `<repo>/.claude/` (the project's, applied last):

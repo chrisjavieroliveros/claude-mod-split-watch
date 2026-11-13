@@ -39,6 +39,9 @@ const DEFAULTS: Settings = {
 }
 
 const SETTINGS_FILE = 'split-watch.json'
+// Files ignored on this machine for good ("Ignore this file"): absolute paths, in ~/.claude only, never in a project.
+// For files that aren't yours to split, like a skill another tool installs and rewrites.
+const IGNORED_FILE = 'split-watch.ignored.json'
 
 // Red-orange to deep red, by the worst file's level.
 const COLOR: Record<Level, string> = { 1: '#E8603C', 2: '#D63A2F', 3: '#A11A1A' }
@@ -136,6 +139,18 @@ async function loadSettings($: EngineInterface, place: Place): Promise<Settings>
 
 let settings: Settings = DEFAULTS
 
+// ---- ignored on this machine ----
+
+const ignoredPath = (home: string) => join(home, `.claude/${IGNORED_FILE}`)
+
+async function loadIgnored($: EngineInterface, place: Place): Promise<string[]> {
+  if (!place.home) return []
+  const files = (await readJson($, ignoredPath(place.home)))?.files
+  return isStrings(files) ? files : []
+}
+
+let ignored: string[] = [] // as written in the file; compared with norm()
+
 // ---- what to look at ----
 
 type Candidate = { path: string; abs: string; kind: Kind } // path as shown: repo-relative, or ~/... for the user's
@@ -227,12 +242,14 @@ async function candidates($: EngineInterface, place: Place, s: Settings): Promis
 
 async function scan($: EngineInterface, place: Place, s: Settings): Promise<Flag[]> {
   const out: Flag[] = []
+  const skip = new Set(ignored.map(norm))
   for (const c of await candidates($, place, s)) {
+    if (skip.has(norm(c.abs))) continue
     const text = await $.fs.read(c.abs).catch(() => undefined)
     if (typeof text !== 'string') continue
     const count = words(text)
     const level = levelOf(s.limits, c.kind, count)
-    if (level > 0) out.push({ path: c.path, words: count, level: level as Level })
+    if (level > 0) out.push({ path: c.path, abs: c.abs, words: count, level: level as Level })
   }
   return out.sort((a, b) => b.level - a.level || b.words - a.words)
 }
@@ -283,6 +300,7 @@ async function syncPane($: EngineInterface, flags: Flag[], asked = false): Promi
 async function refresh($: EngineInterface): Promise<void> {
   place = await placeOf($)
   settings = await loadSettings($, place)
+  ignored = await loadIgnored($, place)
   const flags = await scan($, place, settings)
   await update($, flagged, () => flags)
 
@@ -313,6 +331,22 @@ async function dismissAll($: EngineInterface, flags: Flag[]): Promise<void> {
   await $.store.set(USER_KEY, users)
   await update($, dismissed, () => ({ ...mine, ...users }))
   await syncPane($, flags).catch(() => undefined)
+}
+
+// "Ignore this file": the card's file never flags again on this machine, in any project.
+async function ignoreFile($: EngineInterface, f: Flag): Promise<void> {
+  const p = place ?? (await placeOf($))
+  if (!p.home || !f.abs) return say($, `Couldn't find your home folder to keep the ignore list in`)
+  const path = ignoredPath(p.home)
+  const files = await loadIgnored($, p)
+  if (!files.some(x => norm(x) === norm(f.abs))) files.push(f.abs)
+  const written = await $.fs
+    .write(path, `${JSON.stringify({ files }, null, 2)}\n`)
+    .then(() => true)
+    .catch(() => false)
+  if (!written) return say($, `Couldn't write ${path}`)
+  say($, `Ignoring ${baseName(f.path)} on this machine: remove it from ~/.claude/${IGNORED_FILE} to watch it again`)
+  await refresh($).catch(() => undefined)
 }
 
 // ---- Split it ----
@@ -391,7 +425,11 @@ function report(flags: Flag[]): string {
   const where =
     `Watched: CLAUDE.md files, skills (project + ~/.claude/skills), markdown at the repo root and under ` +
     `${settings.docs.join(', ')}. Limits (getting long / split soon / split now): ${limits}. ` +
-    `Change them in .claude/${SETTINGS_FILE} (project) or ~/.claude/${SETTINGS_FILE}.`
+    `Change them in .claude/${SETTINGS_FILE} (project) or ~/.claude/${SETTINGS_FILE}.` +
+    (ignored.length > 0
+      ? ` Ignored on this machine: ${ignored.length} file${ignored.length === 1 ? '' : 's'}, listed in ` +
+        `~/.claude/${IGNORED_FILE} (remove a path to watch it again).`
+      : '')
   if (flags.length === 0) return `No doc, CLAUDE.md or skill is big enough to split.\n\n${where}`
   const rows = flags.map(f => `- ${f.path}: ${f.words.toLocaleString('en-US')} words, ${LABEL[f.level]}`)
   return `Files to split, worst first:\n${rows.join('\n')}\n\n${where}`
@@ -494,6 +532,7 @@ export const register: Register = on => {
             onPress={() => void $.prompt.fill({ text: '/split-check' })}
           />
           <Button key="dismiss" plain dimColor label="Dismiss" onPress={() => void dismissAll($, flags)} />
+          <Button key="ignore" plain dimColor label="Ignore this file" onPress={() => void ignoreFile($, worst)} />
         </Box>
       </Box>
     )
@@ -545,6 +584,7 @@ export const register: Register = on => {
         <Box flexDirection="row" gap="xs">
           <Button key="split" variant="primary" label="Split it" onPress={() => void splitIt($, worst, e.surface)} />
           <Button key="dismiss" plain dimColor label="Dismiss" onPress={() => void dismissAll($, flags)} />
+          <Button key="ignore" plain dimColor label="Ignore this file" onPress={() => void ignoreFile($, worst)} />
         </Box>
       </Box>
     )

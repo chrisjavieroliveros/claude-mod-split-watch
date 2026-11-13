@@ -4,6 +4,12 @@ import type { On } from 'claude-code'
 const CWD = 'C:\\Users\\chris\\Unity\\Project-Star'
 const HOME = 'C:\\Users\\chris'
 const at = (rel: string) => `${CWD}\\${rel.split('/').join('\\')}`
+// The fixture paths are Windows ones; off Windows the engine resolves them as relative, under the test's folder.
+const fsPath = (e: unknown) => {
+  const path = (e as { path: string }).path
+  const i = path.indexOf('C:\\')
+  return i > 0 ? path.slice(i) : path
+}
 const abs = (key: string) => (key.startsWith('~/') ? `${HOME}\\${key.slice(2).split('/').join('\\')}` : at(key))
 
 const BAND = {
@@ -23,6 +29,7 @@ function world(on: On, sizes: Record<string, number>, opts: Opts | string[] = {}
   const o: Opts = Array.isArray(opts) ? { surfaces: opts } : opts
   const filled: string[] = []
   const panes: string[] = [] // 'open' / 'close', in order
+  const written: Record<string, string> = {} // fs.write, by absolute path; read back before anything else
   const git = o.git ?? true
   mock.store(on, o.store ?? {})
   on('session.cwd', () => ({ value: o.cwd ?? CWD }))
@@ -56,7 +63,7 @@ function world(on: On, sizes: Record<string, number>, opts: Opts | string[] = {}
     return { isFilled: true }
   })
   on('fs.list', (_, e) => {
-    const path = (e as { path: string }).path
+    const path = fsPath(e)
     if (path === CWD) return { value: [entry('Docs', 'dir'), entry('README.md', 'file'), entry('Assets', 'dir')] }
     if (path === abs('~/.claude/skills')) return { value: [entry('prompt-hud', 'dir')] }
     if (path === at('Docs')) return { value: [entry('VFXBriefs.md', 'file'), entry('Small.md', 'file'), entry('ArtDirection', 'dir'), entry('pic.png', 'file')] }
@@ -64,15 +71,22 @@ function world(on: On, sizes: Record<string, number>, opts: Opts | string[] = {}
     if (path === at('.claude/skills')) return { value: [entry('ui-import', 'dir')] }
     throw new Error('ENOENT')
   })
+  on('fs.write', (_, e) => {
+    const { text } = e as { text: string }
+    const path = fsPath(e)
+    written[path] = text
+    return { value: undefined }
+  })
   on('fs.read', (_, e) => {
-    const path = (e as { path: string }).path
+    const path = fsPath(e)
+    if (path in written) return { value: written[path] }
     const raw = Object.keys(o.files ?? {}).find(r => abs(r) === path)
     if (raw !== undefined) return { value: (o.files ?? {})[raw] }
     const rel = Object.keys(sizes).find(r => abs(r) === path)
     if (rel === undefined) throw new Error('ENOENT')
     return { value: text(sizes[rel] ?? 0) }
   })
-  return { filled, panes }
+  return { filled, panes, written }
 }
 
 const TURN = { answer: '', durationMs: 1, isAborted: false, turnId: 't', reason: 'answer', category: null, explanation: null } as const
@@ -300,3 +314,58 @@ test('a dismissal made elsewhere does not hide this project\'s files', async ($,
   expect(await label(ui)).toBe('SPLIT SOON')
   await ui.unmount()
 })
+
+// ---- ignored on this machine ----
+
+const IGNORED = abs('~/.claude/split-watch.ignored.json')
+
+test('Ignore this file drops the card\'s file for good, in a machine-local list; the next file takes the card', async ($, on) => {
+  const sizes: Record<string, number> = { '~/.claude/skills/prompt-hud/SKILL.md': 7400, 'Docs/VFXBriefs.md': 9000 }
+  const w = world(on, sizes)
+  await start($)
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await label(ui)).toBe('SPLIT NOW') // the skill
+  await ui.press({ key: 'ignore' })
+
+  expect(JSON.parse(w.written[IGNORED] ?? '{}')).toEqual({ files: [abs('~/.claude/skills/prompt-hud/SKILL.md')] })
+  expect(await label(ui)).toBe('SPLIT SOON') // the brief now
+  expect((await ui.find({ type: 'Text', text: /words, / }))?.text).toContain('VFXBriefs.md')
+
+  sizes['~/.claude/skills/prompt-hud/SKILL.md'] = 20000 // growing doesn't bring it back, unlike Dismiss
+  await $.turn.complete(TURN)
+  expect(await allFlags($)).not.toContain('prompt-hud')
+  await ui.unmount()
+})
+
+test('an ignore list already on the machine hides its files in every project, and /split-check says so', async ($, on) => {
+  world(on, { '~/.claude/skills/prompt-hud/SKILL.md': 7400, 'Docs/VFXBriefs.md': 9000 }, {
+    files: { '~/.claude/split-watch.ignored.json': JSON.stringify({ files: [abs('~/.claude/skills/prompt-hud/SKILL.md').toUpperCase()] }) },
+  })
+  await start($)
+  const out = await allFlags($)
+  expect(out).not.toContain('prompt-hud')
+  expect(out).toContain('Docs/VFXBriefs.md')
+  expect(out).toContain('Ignored on this machine: 1 file, listed in ~/.claude/split-watch.ignored.json')
+})
+
+test('/split-check reset brings dismissed cards back but keeps ignored files ignored', async ($, on) => {
+  world(on, { 'Docs/VFXBriefs.md': 9000 }, {
+    files: { '~/.claude/split-watch.ignored.json': JSON.stringify({ files: [at('Docs/VFXBriefs.md')] }) },
+  })
+  await start($)
+  await $.command.run({ command: 'split-check', args: 'reset' })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await label(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
+test('in VS Code the pane has Ignore this file too', async ($, on) => {
+  const w = world(on, { 'Docs/VFXBriefs.md': 9900 }, ['vscode'])
+  await start($, 'vscode')
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  await ui.press({ key: 'ignore' })
+  expect(JSON.parse(w.written[IGNORED] ?? '{}').files).toEqual([at('Docs/VFXBriefs.md')])
+  expect(w.panes).toEqual(['open', 'close'])
+  await ui.unmount()
+})
+
