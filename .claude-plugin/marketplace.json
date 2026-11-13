@@ -1,0 +1,5 @@
+{
+  "name": "claude-mod-split-watch",
+  "owner": { "name": "chrisjavieroliveros" },
+  "plugins": [{ "name": "split-watch", "source": "./" }]
+}
