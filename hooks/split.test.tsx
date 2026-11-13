@@ -82,8 +82,8 @@ const start = ($: T, surface: 'desktop' | 'terminal' | 'vscode' = 'desktop') => 
 const label = async (ui: Awaited<ReturnType<T['ui']['mount']>>) =>
   (await ui.find({ type: 'Text', text: /^(GETTING LONG|SPLIT SOON|SPLIT NOW)$/ }))?.text
 
-test('a brief past 10k words shows a red "split soon" card, on every surface', async ($, on) => {
-  world(on, { 'CLAUDE.md': 860, 'Docs/VFXBriefs.md': 14907, 'Docs/ArtDirection/ArtGuide.md': 6200, 'Docs/Small.md': 300 })
+test('a brief past 8k words shows a red "split soon" card, on every surface', async ($, on) => {
+  world(on, { 'CLAUDE.md': 860, 'Docs/VFXBriefs.md': 9900, 'Docs/ArtDirection/ArtGuide.md': 6200, 'Docs/Small.md': 300 })
   await start($)
   for (const surface of ['terminal', 'desktop', 'vscode', 'mobile'] as const) {
     const ui = await $.ui.mount({ ...BAND, surface })
@@ -93,8 +93,8 @@ test('a brief past 10k words shows a red "split soon" card, on every surface', a
   }
 })
 
-test('past 15k words it turns deep red: "split now"', async ($, on) => {
-  world(on, { 'Docs/VFXBriefs.md': 16000 })
+test('past 12k words it turns deep red: "split now"', async ($, on) => {
+  world(on, { 'Docs/VFXBriefs.md': 13000 })
   await start($)
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect(await label(ui)).toBe('SPLIT NOW')
@@ -111,7 +111,7 @@ test('CLAUDE.md has tighter limits: 2.6k words is already "split now"', async ($
 })
 
 test('nothing big enough: no card', async ($, on) => {
-  world(on, { 'CLAUDE.md': 860, 'Docs/VFXBriefs.md': 5000, '.claude/skills/ui-import/SKILL.md': 2000 })
+  world(on, { 'CLAUDE.md': 860, 'Docs/VFXBriefs.md': 4000, '.claude/skills/ui-import/SKILL.md': 2000 })
   await start($)
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect(await label(ui)).toBeUndefined()
@@ -121,7 +121,7 @@ test('nothing big enough: no card', async ($, on) => {
 type Call = { server: string; tool: string; args: Record<string, unknown> }
 
 test('Split it starts a new top-level Opus chat at high effort, nothing drafted here', async ($, on) => {
-  const w = world(on, { 'Docs/VFXBriefs.md': 14907, 'Docs/Small.md': 7000 })
+  const w = world(on, { 'Docs/VFXBriefs.md': 9900, 'Docs/Small.md': 7000 })
   const calls: Call[] = []
   on('mcp.call', (_, e) => {
     calls.push(e as Call)
@@ -137,14 +137,14 @@ test('Split it starts a new top-level Opus chat at high effort, nothing drafted 
   expect(startCall?.args.model).toBe('claude-opus-5-5')
   expect(startCall?.args.effort).toBe('high')
   expect(startCall?.args.context).toBe('fresh')
-  expect(String(startCall?.args.prompt)).toContain('Docs/VFXBriefs.md is 14.9k words')
+  expect(String(startCall?.args.prompt)).toContain('Docs/VFXBriefs.md is 9.9k words')
   expect(calls.map(c => c.tool)).toEqual(['start_session', 'set_session_model', 'set_session_effort', 'open_session_in', 'detach_session'])
   expect(calls.slice(1).every(c => c.args.session_id === 'local_abc123')).toBe(true)
   await ui.unmount()
 })
 
 test('without the desktop session tools, Split it falls back to drafting here', async ($, on) => {
-  const w = world(on, { 'Docs/VFXBriefs.md': 14907 })
+  const w = world(on, { 'Docs/VFXBriefs.md': 9900 })
   on('mcp.call', () => {
     throw new Error('no server ccd_session')
   })
@@ -152,23 +152,23 @@ test('without the desktop session tools, Split it falls back to drafting here', 
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   await ui.press({ key: 'split' })
   expect(w.filled.length).toBe(1)
-  expect(w.filled[0]).toContain('Docs/VFXBriefs.md is 14.9k words')
+  expect(w.filled[0]).toContain('Docs/VFXBriefs.md is 9.9k words')
   await ui.unmount()
 })
 
 test('Dismiss hides it until a file grows a level', async ($, on) => {
-  const sizes: Record<string, number> = { 'Docs/VFXBriefs.md': 12000 }
+  const sizes: Record<string, number> = { 'Docs/VFXBriefs.md': 9000 }
   world(on, sizes)
   await start($)
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   await ui.press({ key: 'dismiss' })
   expect(await label(ui)).toBeUndefined()
 
-  sizes['Docs/VFXBriefs.md'] = 13000 // same level: stays hidden
+  sizes['Docs/VFXBriefs.md'] = 10500 // same level: stays hidden
   await $.turn.complete(TURN)
   expect(await label(ui)).toBeUndefined()
 
-  sizes['Docs/VFXBriefs.md'] = 15500 // a level up: back, deep red
+  sizes['Docs/VFXBriefs.md'] = 12500 // a level up: back, deep red
   await $.turn.complete(TURN)
   expect(await label(ui)).toBe('SPLIT NOW')
   await ui.unmount()
@@ -182,7 +182,7 @@ const PANE = {
 } as const
 
 test('in VS Code (no band there) the card opens as a pane with the whole list', async ($, on) => {
-  const w = world(on, { 'Docs/VFXBriefs.md': 14907, 'Docs/ArtDirection/ArtGuide.md': 6200 }, ['vscode'])
+  const w = world(on, { 'Docs/VFXBriefs.md': 9900, 'Docs/ArtDirection/ArtGuide.md': 6200 }, ['vscode'])
   await start($, 'vscode')
   expect(w.panes).toEqual(['open'])
   const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
@@ -192,7 +192,7 @@ test('in VS Code (no band there) the card opens as a pane with the whole list', 
 })
 
 test('in VS Code Split it drafts the prompt here, without the desktop session tools', async ($, on) => {
-  const w = world(on, { 'Docs/VFXBriefs.md': 14907 }, ['vscode'])
+  const w = world(on, { 'Docs/VFXBriefs.md': 9900 }, ['vscode'])
   const calls: string[] = []
   on('mcp.call', (_, e) => {
     calls.push((e as Call).tool)
@@ -203,12 +203,12 @@ test('in VS Code Split it drafts the prompt here, without the desktop session to
   await ui.press({ key: 'split' })
   expect(calls.length).toBe(0)
   expect(w.filled.length).toBe(1)
-  expect(w.filled[0]).toContain('Docs/VFXBriefs.md is 14.9k words')
+  expect(w.filled[0]).toContain('Docs/VFXBriefs.md is 9.9k words')
   await ui.unmount()
 })
 
 test('in VS Code Dismiss closes the pane; a level up opens it again', async ($, on) => {
-  const sizes: Record<string, number> = { 'Docs/VFXBriefs.md': 12000 }
+  const sizes: Record<string, number> = { 'Docs/VFXBriefs.md': 9000 }
   const w = world(on, sizes, ['vscode'])
   await start($, 'vscode')
   const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
@@ -222,7 +222,7 @@ test('in VS Code Dismiss closes the pane; a level up opens it again', async ($, 
 })
 
 test('on the terminal or desktop alone no pane opens: the band carries it', async ($, on) => {
-  const w = world(on, { 'Docs/VFXBriefs.md': 14907 }, ['terminal'])
+  const w = world(on, { 'Docs/VFXBriefs.md': 9900 }, ['terminal'])
   await start($, 'terminal')
   await $.turn.complete(TURN)
   expect(w.panes.length).toBe(0)
@@ -233,7 +233,7 @@ test('on the terminal or desktop alone no pane opens: the band carries it', asyn
 const allFlags = async ($: T) => (await $.command.run({ command: 'split-check', args: '' })).text ?? ''
 
 test("a session cd'd into a subfolder still watches the whole repo (git root)", async ($, on) => {
-  world(on, { 'Docs/VFXBriefs.md': 14907 }, { cwd: at('Assets/Scripts') })
+  world(on, { 'Docs/VFXBriefs.md': 9900 }, { cwd: at('Assets/Scripts') })
   await start($)
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect(await label(ui)).toBe('SPLIT SOON')
@@ -250,12 +250,12 @@ test('docs folders match any case; markdown outside them and the root is left al
 })
 
 test("nested CLAUDE.md files and the user's own CLAUDE.md and skills are watched", async ($, on) => {
-  world(on, { 'packages/api/CLAUDE.md': 2100, '~/.claude/CLAUDE.md': 1600, '~/.claude/skills/prompt-hud/SKILL.md': 4600 })
+  world(on, { 'packages/api/CLAUDE.md': 2100, '~/.claude/CLAUDE.md': 1600, '~/.claude/skills/prompt-hud/SKILL.md': 3600 })
   await start($)
   const out = await allFlags($)
   expect(out).toContain('packages/api/CLAUDE.md: 2,100 words, split soon')
   expect(out).toContain('~/.claude/CLAUDE.md: 1,600 words, getting long')
-  expect(out).toContain('~/.claude/skills/prompt-hud/SKILL.md: 4,600 words, split soon')
+  expect(out).toContain('~/.claude/skills/prompt-hud/SKILL.md: 3,600 words, split soon')
 })
 
 test('changelogs and licences are never flagged', async ($, on) => {
@@ -267,7 +267,7 @@ test('changelogs and licences are never flagged', async ($, on) => {
 })
 
 test('outside git it walks the root and the docs folders', async ($, on) => {
-  world(on, { 'Docs/ArtDirection/ArtGuide.md': 16000, 'README.md': 100 }, { git: false })
+  world(on, { 'Docs/ArtDirection/ArtGuide.md': 13000, 'README.md': 100 }, { git: false })
   await start($)
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect(await label(ui)).toBe('SPLIT NOW')
@@ -275,7 +275,7 @@ test('outside git it walks the root and the docs folders', async ($, on) => {
 })
 
 test('a project split-watch.json overrides folders and limits', async ($, on) => {
-  world(on, { 'Design/Spec.md': 3000, 'Docs/VFXBriefs.md': 14907 }, {
+  world(on, { 'Design/Spec.md': 3000, 'Docs/VFXBriefs.md': 9900 }, {
     files: { '.claude/split-watch.json': JSON.stringify({ docs: ['Design'], limits: { doc: [1000, 2000, 2500] } }) },
   })
   await start($)
@@ -294,7 +294,7 @@ test("a user's file dismissed in another project stays dismissed here; this proj
 })
 
 test('a dismissal made elsewhere does not hide this project\'s files', async ($, on) => {
-  world(on, { 'Docs/VFXBriefs.md': 12000 }, { store: { 'dismissed:c:\\elsewhere': { 'Docs/VFXBriefs.md': 3 } } })
+  world(on, { 'Docs/VFXBriefs.md': 9000 }, { store: { 'dismissed:c:\\elsewhere': { 'Docs/VFXBriefs.md': 3 } } })
   await start($)
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect(await label(ui)).toBe('SPLIT SOON')

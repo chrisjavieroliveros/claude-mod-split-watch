@@ -1,6 +1,6 @@
 {
   "name": "split-watch",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "In any project: a card above the prompt, red-orange to deep red, while a doc, CLAUDE.md or skill (the project's or ~/.claude's) has grown big enough to split (a pane in VS Code).",
   "types": "./types/index.d.ts"
 }

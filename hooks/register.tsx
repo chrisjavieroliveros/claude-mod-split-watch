@@ -10,7 +10,7 @@ const dismissed = atom({ plugin: 'split-watch', key: 'dismissed' } as const, {})
 // - CLAUDE.md / CLAUDE.local.md anywhere in the repo, .claude/CLAUDE.md, and ~/.claude/CLAUDE.md: loaded into every
 //   session, so they cost on every turn long before they get hard to read;
 // - each skill's SKILL.md, the project's (.claude/skills) and the user's (~/.claude/skills): loaded whole each run;
-// - markdown at the repo root and under the docs folders: past ~15k words a file no longer fits one Read, so it is
+// - markdown at the repo root and under the docs folders: past ~12k words a file nears what one Read takes, so it is
 //   read in pieces and things get missed.
 // Plugin skills are left out: they belong to someone else and can't be split here.
 type Kind = 'doc' | 'claude' | 'skill'
@@ -29,9 +29,9 @@ const DEFAULTS: Settings = {
   docs: ['docs', 'doc', 'documentation'],
   ignore: ['CHANGELOG.md', 'CHANGES.md', 'HISTORY.md', 'LICENSE.md', 'CODE_OF_CONDUCT.md', 'node_modules', 'vendor'],
   limits: {
-    doc: [6000, 10000, 15000],
+    doc: [5000, 8000, 12000],
     claude: [1500, 2000, 2500],
-    skill: [3000, 4500, 6000],
+    skill: [2500, 3500, 4500],
   },
   // Bump when a newer Opus ships, or set "model" in a split-watch.json.
   model: 'claude-opus-5-5',
@@ -326,7 +326,7 @@ function splitPrompt(f: Flag): string {
 }
 
 const background = (root: string) =>
-  `The split-watch mod (a card above the prompt) flagged this file as too long: past ~15k words a doc no longer fits ` +
+  `The split-watch mod (a card above the prompt) flagged this file as too long: past ~12k words a doc nears what one Read takes ` +
   `one Read, and CLAUDE.md / SKILL.md files are loaded whole into every session or skill run. Project folder: ${root}. ` +
   `Read its CLAUDE.md, if there is one, for the working rules, and look for an earlier split in the repo (a folder ` +
   `of one file per topic plus a short index file) to follow its shape.`

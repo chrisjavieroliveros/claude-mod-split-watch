@@ -12,8 +12,8 @@ It finds the repo root with git, so a session in a subfolder still watches the w
 `.gitignore`. Outside git it walks the root and the docs folders. Changelogs, licences, `node_modules` and `vendor`
 are skipped.
 
-**Default limits** (words, for getting long / split soon / split now): docs 6k / 10k / 15k, CLAUDE.md 1.5k / 2k / 2.5k,
-SKILL.md 3k / 4.5k / 6k.
+**Default limits** (words, for getting long / split soon / split now): docs 5k / 8k / 12k, CLAUDE.md 1.5k / 2k / 2.5k,
+SKILL.md 2.5k / 3.5k / 4.5k. Docs stop before ~25k tokens (one Read), SKILL.md before ~500 lines.
 
 **Buttons**: *Split it* starts a new chat that proposes the split (on the desktop app; elsewhere it drafts the prompt
 in the prompt box), *List all* runs `/split-check`, and *Dismiss* hides the card until a file grows another level.
@@ -27,7 +27,7 @@ Optional `split-watch.json`, in `~/.claude/` (your defaults) and/or `<repo>/.cla
 {
   "docs": ["docs", "Design", "packages/api/docs"],
   "ignore": ["CHANGELOG.md", "node_modules", "docs/generated"],
-  "limits": { "doc": [6000, 10000, 15000], "claude": [1500, 2000, 2500], "skill": [3000, 4500, 6000] },
+  "limits": { "doc": [5000, 8000, 12000], "claude": [1500, 2000, 2500], "skill": [2500, 3500, 4500] },
   "model": "claude-opus-5-5",
   "effort": "high"
 }
